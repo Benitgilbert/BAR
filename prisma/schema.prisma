@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+enum StaffRole {
+  ADMIN
+  CASHIER
+  WAITER
+  RECEPTIONIST
+}
+
+enum RoomType {
+  STANDARD
+  VIP
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  CLEANING
+}
+
+enum RentalType {
+  HOURLY
+  DAILY
+}
+
+enum BookingStatus {
+  PENDING
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+enum SettlementStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  REFUNDED
+}
+
+enum ItemCategory {
+  BEER
+  LIQUOR
+  SOFT_DRINK
+  FOOD
+}
+
+enum TableSection {
+  BAR_COUNTER
+  GARDEN
+  VIP_LOUNGE
+}
+
+enum OrderType {
+  TABLE
+  ROOM
+}
+
+enum OrderStatus {
+  OPEN
+  PAID
+  CANCELLED
+}
+
+enum ProductionStation {
+  BAR
+  KITCHEN_MUCOMA
+}
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  CARD
+  ROOM_FOLIO
+  OTHER
+}
+
+model User {
+  id              String    @id @default(cuid())
+  fullName        String
+  email           String    @unique
+  phone           String?
+  passwordHash    String?
+  role            StaffRole @default(WAITER)
+  active          Boolean   @default(true)
+  bookingsCreated Booking[] @relation("BookingCreatedBy")
+  orders          Order[]   @relation("OrderCashier")
+  ordersWaited    Order[]   @relation("OrderWaiter")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([role, active])
+}
+
+model Room {
+  id           String     @id @default(cuid())
+  number       String     @unique
+  name         String
+  type         RoomType   @default(STANDARD)
+  hourlyRate   Int
+  dailyRate    Int
+  minimumHours Int        @default(2)
+  capacity     Int        @default(2)
+  status       RoomStatus @default(AVAILABLE)
+  amenities    String     @default("")
+  notes        String?
+  bookings     Booking[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([status])
+  @@index([type, status])
+}
+
+model Booking {
+  id                 String           @id @default(cuid())
+  bookingCode        String           @unique
+  roomId             String
+  room               Room             @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  guestName          String
+  guestPhone         String
+  guestEmail         String?
+  guestIdDocument    String?
+  rentalType         RentalType
+  rateAmount         Int
+  numberOfUnits      Int              @default(1)
+  status             BookingStatus    @default(PENDING)
+  settlementStatus   SettlementStatus @default(PENDING)
+  checkedInAt        DateTime
+  expectedCheckoutAt DateTime
+  checkedOutAt       DateTime?
+  notes              String?
+  createdById        String?
+  createdBy          User?            @relation("BookingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  orders             Order[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([roomId, status])
+  @@index([guestPhone])
+  @@index([settlementStatus])
+}
+
+model Item {
+  id                String            @id @default(cuid())
+  sku               String            @unique
+  name              String
+  description       String?
+  category          ItemCategory
+  price             Int
+  stock             Int               @default(0)
+  lowStockThreshold Int               @default(5)
+  unit              String            @default("item")
+  productionStation ProductionStation @default(BAR)
+  active            Boolean           @default(true)
+  orderItems        OrderItem[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([category, active])
+  @@index([stock])
+}
+
+model Table {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  section   TableSection
+  capacity  Int          @default(4)
+  active    Boolean      @default(true)
+  orders    Order[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([section, active])
+}
+
+model Order {
+  id               String           @id @default(cuid())
+  orderNumber      String           @unique
+  type             OrderType
+  status           OrderStatus      @default(OPEN)
+  settlementStatus SettlementStatus @default(PENDING)
+  tableId          String?
+  table            Table?           @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  bookingId        String?
+  booking          Booking?         @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  cashierId        String?
+  cashier          User?            @relation("OrderCashier", fields: [cashierId], references: [id], onDelete: SetNull)
+  waiterId         String?
+  waiter           User?            @relation("OrderWaiter", fields: [waiterId], references: [id], onDelete: SetNull)
+  customerName     String?
+  customerPhone    String?
+  subtotal         Int
+  discount         Int              @default(0)
+  tax              Int              @default(0)
+  total            Int
+  amountPaid       Int              @default(0)
+  changeDue        Int              @default(0)
+  roundCount       Int              @default(0)
+  paymentMethod    PaymentMethod?
+  notes            String?
+  items            OrderItem[]
+  rounds           OrderRound[]
+  openedAt         DateTime         @default(now())
+  lastRoundAt      DateTime?
+  settledAt        DateTime?
+  paidAt           DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([type, status])
+  @@index([tableId, status])
+  @@index([bookingId, status])
+  @@index([createdAt])
+}
+
+model OrderRound {
+  id           String      @id @default(cuid())
+  orderId      String
+  order        Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  roundNumber  Int
+  ticketNumber String      @unique
+  waiterName   String
+  notes        String?
+  dispatchedAt DateTime?
+  createdAt    DateTime    @default(now())
+  items        OrderItem[]
+
+  @@unique([orderId, roundNumber])
+  @@index([orderId, dispatchedAt])
+}
+
+model OrderItem {
+  id           String            @id @default(cuid())
+  orderId      String
+  order        Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  roundId      String?
+  round        OrderRound?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  roundNumber  Int               @default(1)
+  itemId       String
+  item         Item              @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemName     String
+  station      ProductionStation @default(BAR)
+  unitPrice    Int
+  quantity     Int
+  lineTotal    Int
+  notes        String?
+  dispatchedAt DateTime?
+  createdAt    DateTime          @default(now())
+
+  @@index([orderId])
+  @@index([itemId])
+  @@index([roundId])
+  @@index([orderId, roundNumber])
+}

@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f6f1;
+  --foreground: #142019;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-canvas: #f4f6f1;
+  --color-forest-50: #eef5f0;
+  --color-forest-100: #dcebe1;
+  --color-forest-200: #b9d7c5;
+  --color-forest-300: #87b99e;
+  --color-forest-400: #579878;
+  --color-forest-500: #397a5c;
+  --color-forest-600: #296148;
+  --color-forest-700: #234e3b;
+  --color-forest-800: #1d4032;
+  --color-forest-900: #12372a;
+  --color-forest-950: #09271d;
+  --color-gold-100: #fbf4df;
+  --color-gold-300: #eac76f;
+  --color-gold-400: #e5ad3d;
+  --color-gold-500: #cf9026;
+  --color-gold-600: #ac6f19;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-lora);
+  --shadow-soft: 0 18px 55px rgba(18, 55, 42, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--background);
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(229, 173, 61, 0.06), transparent 24rem),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+select {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: #dcebe1;
+  color: #09271d;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.receipt-print {
+  color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 4mm;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .receipt-print,
+  .receipt-print * {
+    visibility: visible !important;
+  }
+
+  .receipt-print {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 72mm !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 4mm !important;
+    box-shadow: none !important;
+  }
+
+  .receipt-actions {
+    display: none !important;
+  }
+}
