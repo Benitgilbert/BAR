@@ -587,7 +587,7 @@ function CartPanel({
         )}
       </div>
 
-      <div className="border-t border-slate-100 px-5 py-4">
+      <div className="sticky bottom-0 z-10 border-t border-slate-100 bg-white/95 px-5 py-4 backdrop-blur-sm">
         <label className="block">
           <span className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-slate-400">
             Round notes · optional
@@ -627,7 +627,7 @@ function CartPanel({
             type="button"
             onClick={onSave}
             disabled={!cart.length || isSubmitting}
-            className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-forest-200 bg-forest-50 px-2 text-[10px] font-extrabold text-forest-800 transition hover:bg-forest-100 disabled:opacity-40"
+            className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-forest-200 bg-forest-50 px-2 text-[11px] font-extrabold text-forest-800 transition hover:bg-forest-100 disabled:opacity-40"
           >
             <ClipboardList className="h-3.5 w-3.5" />
             Open Tab / Save
@@ -636,7 +636,7 @@ function CartPanel({
             type="button"
             onClick={onSend}
             disabled={(!cart.length && !hasPending) || isSubmitting}
-            className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-2 text-[10px] font-extrabold text-white transition hover:bg-emerald-700 disabled:opacity-40"
+            className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-2 text-[11px] font-extrabold text-white transition hover:bg-emerald-700 disabled:opacity-40"
           >
             <Send className="h-3.5 w-3.5" />
             Send Round
@@ -645,7 +645,7 @@ function CartPanel({
             type="button"
             onClick={onPrint}
             disabled={(!cart.length && !activeOrder) || isSubmitting}
-            className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 text-[10px] font-extrabold text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+            className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 text-[11px] font-extrabold text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
           >
             <Printer className="h-3.5 w-3.5" />
             Print Bill / Fagitire
@@ -654,7 +654,7 @@ function CartPanel({
             type="button"
             onClick={onSettle}
             disabled={!activeOrder || Boolean(cart.length) || hasPending || isSubmitting}
-            className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2 text-[10px] font-extrabold text-amber-800 transition hover:bg-amber-100 disabled:opacity-40"
+            className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2 text-[11px] font-extrabold text-amber-800 transition hover:bg-amber-100 disabled:opacity-40"
           >
             <ReceiptText className="h-3.5 w-3.5" />
             Settle Bill
@@ -1124,6 +1124,31 @@ export function MobilePos({
             )}
           </div>
 
+          {activeOrder && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-forest-200 bg-forest-50 px-4 py-3 shadow-sm">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-forest-900 text-white">
+                  <ClipboardList className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-extrabold text-forest-950">
+                    {activeOrder.tableName ? `Table ${activeOrder.tableName}` : activeOrder.bookingLabel}
+                  </p>
+                  <p className="mt-1 text-[10px] font-semibold text-forest-700/65">
+                    {activeOrder.orderNumber} · {countItems(activeOrder)} items · {activeOrder.roundCount} rounds
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCartOpen(true)}
+                className="shrink-0 rounded-xl bg-white px-3 py-2 text-[10px] font-extrabold text-forest-800 shadow-sm"
+              >
+                Actions
+              </button>
+            </div>
+          )}
+
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -1151,20 +1176,30 @@ export function MobilePos({
             {filteredItems.map((item) => {
               const isLowStock = item.stock <= item.lowStockThreshold;
               const isKitchen = item.productionStation === "KITCHEN_MUCOMA";
+              const cartQuantity = cart.find((line) => line.item.id === item.id)?.quantity ?? 0;
               return (
-                <button key={item.id} type="button" onClick={() => addItem(item)} disabled={item.stock < 1} className="group relative min-h-[158px] overflow-hidden rounded-[20px] border border-white bg-white p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-forest-200 hover:shadow-[0_16px_34px_rgba(18,55,42,0.12)] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0">
-                  <span className={`inline-flex rounded-lg px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider ${categoryStyles[item.category]}`}>{categoryLabels[item.category]}</span>
-                  <span className={`absolute right-4 top-4 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[8px] font-extrabold uppercase ${isKitchen ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700"}`}>
-                    {isKitchen ? <ChefHat className="h-2.5 w-2.5" /> : <GlassWater className="h-2.5 w-2.5" />}
-                    {isKitchen ? "Mucoma" : "Bar"}
-                  </span>
-                  <h3 className="mt-4 line-clamp-2 max-w-[75%] text-sm font-extrabold leading-5 text-forest-950">{item.name}</h3>
-                  {item.description && <p className="mt-1.5 line-clamp-1 text-[10px] text-slate-400">{item.description}</p>}
-                  <div className="absolute inset-x-4 bottom-3.5 flex items-end justify-between gap-2">
-                    <span className="text-sm font-black text-forest-950">{formatRWF(item.price)}</span>
-                    <span className={`text-[9px] font-bold ${isLowStock ? "text-amber-600" : "text-emerald-600"}`}>{item.stock} {item.unit}</span>
+                <button key={item.id} type="button" onClick={() => addItem(item)} disabled={item.stock < 1} className="group relative flex min-h-[174px] flex-col overflow-hidden rounded-[20px] border border-white bg-white p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-forest-200 hover:shadow-[0_16px_34px_rgba(18,55,42,0.12)] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className={`inline-flex rounded-lg px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider ${categoryStyles[item.category]}`}>{categoryLabels[item.category]}</span>
+                    <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[8px] font-extrabold uppercase ${isKitchen ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700"}`}>
+                      {isKitchen ? <ChefHat className="h-2.5 w-2.5" /> : <GlassWater className="h-2.5 w-2.5" />}
+                      {isKitchen ? "Mucoma" : "Bar"}
+                    </span>
                   </div>
-                  <span className="absolute bottom-3 right-3 grid h-7 w-7 translate-y-1 place-items-center rounded-lg bg-forest-900 text-white opacity-0 transition group-hover:translate-y-0 group-hover:opacity-100"><Plus className="h-4 w-4" /></span>
+                  {cartQuantity > 0 && (
+                    <span className="absolute right-3 top-12 grid h-6 min-w-6 place-items-center rounded-full bg-gold-400 px-1.5 text-[10px] font-black text-forest-950 shadow-sm">
+                      {cartQuantity}
+                    </span>
+                  )}
+                  <h3 className="mt-3 line-clamp-2 min-h-[40px] text-sm font-extrabold leading-5 text-forest-950">{item.name}</h3>
+                  <p className="mt-1 line-clamp-1 min-h-[15px] text-[10px] leading-4 text-slate-400">{item.description ?? "Tap to add"}</p>
+                  <div className="mt-auto flex items-end justify-between gap-2 pt-3">
+                    <span className="text-sm font-black text-forest-950">{formatRWF(item.price)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold ${isLowStock ? "text-amber-600" : "text-emerald-600"}`}>{item.stock} {item.unit}</span>
+                      <span className="grid h-8 w-8 place-items-center rounded-lg bg-forest-900 text-white shadow-sm transition group-hover:bg-forest-800"><Plus className="h-4 w-4" /></span>
+                    </div>
+                  </div>
                 </button>
               );
             })}
@@ -1178,11 +1213,11 @@ export function MobilePos({
         <aside className="sticky top-[100px] hidden max-h-[calc(100vh-125px)] overflow-hidden rounded-[26px] border border-white bg-white shadow-soft xl:block">{cartPanel}</aside>
       </div>
 
-      {newItemCount > 0 && (
+      {(newItemCount > 0 || activeOrder) && (
         <div className="fixed inset-x-3 bottom-[76px] z-40 flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-forest-950 px-4 py-3 text-white shadow-[0_18px_50px_rgba(9,39,29,0.3)] xl:hidden">
           <button type="button" onClick={() => setCartOpen(true)} className="flex min-w-0 items-center gap-3 text-left">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-gold-300"><ShoppingBag className="h-5 w-5" /></span>
-            <span className="min-w-0"><span className="block truncate text-xs font-extrabold">{activeOrder ? `Add to ${destination}` : "View current order"}</span><span className="mt-1 block text-[10px] text-white/50">{newItemCount} new items · {formatRWF(runningTotal)}</span></span>
+            <span className="min-w-0"><span className="block truncate text-xs font-extrabold">{activeOrder ? `Open tab · ${activeOrder.orderNumber}` : "View current order"}</span><span className="mt-1 block text-[10px] text-white/50">{activeOrder ? `${countItems(activeOrder)} items · ${activeOrder.roundCount} rounds` : `${newItemCount} new items`} · Tap for actions</span></span>
           </button>
           <span className="shrink-0 text-sm font-black text-gold-300">{formatRWF(runningTotal)}</span>
         </div>

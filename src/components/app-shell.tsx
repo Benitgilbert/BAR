@@ -174,12 +174,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {menuOpen && <Drawer onClose={() => setMenuOpen(false)} />}
 
-      <main className="mx-auto min-h-[calc(100vh-72px)] max-w-[1600px] px-4 py-5 sm:px-6 sm:py-7 lg:min-h-[calc(100vh-80px)] lg:px-8 lg:py-8">
+      <main className="app-main mx-auto min-h-[calc(100vh-72px)] max-w-[1600px] px-4 py-5 sm:px-6 sm:py-7 lg:min-h-[calc(100vh-80px)] lg:px-8 lg:py-8">
         {children}
       </main>
 
       <nav
-        className="fixed inset-x-3 bottom-3 z-30 flex items-center justify-around rounded-2xl border border-white/70 bg-forest-950/96 px-2 py-2 text-white shadow-[0_18px_50px_rgba(9,39,29,0.35)] backdrop-blur-xl lg:hidden"
+        className="mobile-nav-safe fixed inset-x-3 z-30 flex min-h-[68px] items-center justify-around rounded-2xl border border-white/70 bg-forest-950/96 px-2 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2 text-white shadow-[0_18px_50px_rgba(9,39,29,0.35)] backdrop-blur-xl lg:hidden"
         aria-label="Quick navigation"
       >
         {navigation.slice(0, 4).map((item) => {
@@ -191,7 +191,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex min-w-16 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[9px] font-bold transition-colors ${
+              className={`flex min-h-14 min-w-16 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[10px] font-bold transition-colors ${
                 isActive ? "bg-white/12 text-gold-300" : "text-white/55"
               }`}
             >
