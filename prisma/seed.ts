@@ -19,11 +19,11 @@ const staff = [
     role: StaffRole.ADMIN,
   },
   {
-    id: "staff-cashier",
+    id: "staff-mucoma",
     fullName: "Grace Mukamana",
-    email: "cashier@umugano.rw",
+    email: "mucoma@umugano.rw",
     phone: "+250 78X XXX XXX",
-    role: StaffRole.CASHIER,
+    role: StaffRole.MUCOMA,
   },
   {
     id: "staff-waiter",

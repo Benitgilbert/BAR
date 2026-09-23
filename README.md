@@ -80,6 +80,17 @@ Open [http://localhost:3000](http://localhost:3000).
 - `POST /api/orders/:id/settle` — settle an order and return the final receipt payload
 - `POST /api/bookings` — check a guest into a room
 
+## Inventory and staff access
+
+`/inventory` now supports product registration, editing, stock adjustments, activation/restoration, and safe archival. Historical orders remain readable when a product is archived.
+
+The current operational policy is:
+
+- Owner, Receptionist, and Waiter: full operational and catalog access
+- Mucoma: kitchen-ticket access only; no catalog, pricing, or payment permissions
+
+The current deployment uses `UMUGANO_ROLE` as a temporary server-side role setting and defaults to `RECEPTIONIST`. Replace this with authenticated sessions before production multi-user rollout.
+
 ## Validation
 
 ```bash

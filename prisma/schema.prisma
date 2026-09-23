@@ -13,6 +13,7 @@ enum StaffRole {
   CASHIER
   WAITER
   RECEPTIONIST
+  MUCOMA
 }
 
 enum RoomType {

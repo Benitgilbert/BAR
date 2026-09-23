@@ -29,6 +29,21 @@ export interface RoomSummary {
   } | null;
 }
 
+export interface InventoryItem {
+  id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  category: ItemCategory;
+  productionStation: ProductionStation;
+  price: number;
+  stock: number;
+  lowStockThreshold: number;
+  unit: string;
+  active: boolean;
+  updatedAt: string;
+}
+
 export interface PosItem {
   id: string;
   sku: string;
