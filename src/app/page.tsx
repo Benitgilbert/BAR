@@ -1,27 +1,49 @@
-import { OrderStatus } from "@prisma/client";
 import {
+  KitchenStatus,
+  OrderStatus,
+  PaymentMethod,
+  ProductionStation,
+} from "@prisma/client";
+import {
+  Activity,
   ArrowUpRight,
   BarChart3,
   BedDouble,
   ChevronRight,
+  CircleAlert,
   Clock3,
   PackageOpen,
   Plus,
   ShoppingCart,
+  TrendingDown,
+  TrendingUp,
+  Users,
   UtensilsCrossed,
   WalletCards,
+  type LucideIcon,
 } from "lucide-react";
 import { connection } from "next/server";
 import Link from "next/link";
 
+import { formatRWF } from "@/config/business";
 import { requirePageCapability } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { formatRWF } from "@/config/business";
+
+const KIGALI_OFFSET = "+02:00";
+const DAY_IN_MS = 24 * 60 * 60 * 1_000;
 
 const roomStatusStyles = {
   AVAILABLE: "bg-emerald-50 text-emerald-700",
   OCCUPIED: "bg-amber-50 text-amber-700",
   CLEANING: "bg-sky-50 text-sky-700",
+};
+
+const paymentLabels: Record<PaymentMethod, string> = {
+  CASH: "Cash",
+  MOBILE_MONEY: "Mobile money",
+  CARD: "Card",
+  ROOM_FOLIO: "Room folio",
+  OTHER: "Other",
 };
 
 function formatTime(value: Date) {
@@ -32,28 +54,86 @@ function formatTime(value: Date) {
   }).format(value);
 }
 
-function getKigaliDayRange() {
+function getKigaliDateKey(value: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     timeZone: "Africa/Kigali",
-  }).formatToParts(new Date());
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
+  }).formatToParts(value);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
-  const start = new Date(`${value("year")}-${value("month")}-${value("day")}T00:00:00+02:00`);
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
 
-  return {
-    start,
-    end: new Date(start.getTime() + 24 * 60 * 60 * 1_000),
-  };
+function getKigaliDayStart(value = new Date()) {
+  return new Date(`${getKigaliDateKey(value)}T00:00:00${KIGALI_OFFSET}`);
+}
+
+function formatCompactRWF(value: number) {
+  if (value === 0) return "0";
+  return `${new Intl.NumberFormat("en-RW", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value)} RWF`;
+}
+
+function formatDayLabel(value: Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    timeZone: "Africa/Kigali",
+  }).format(value);
+}
+
+function formatAction(value: string) {
+  return value
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
+}
+
+function MetricCard({
+  label,
+  value,
+  note,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  icon: LucideIcon;
+  tone: string;
+}) {
+  return (
+    <article className="rounded-2xl border border-white bg-white p-4 shadow-soft sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className={`grid h-9 w-9 place-items-center rounded-xl ${tone}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <ArrowUpRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
+      </div>
+      <p className="mt-4 text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1.5 truncate text-xl font-black tracking-[-0.04em] text-forest-950 sm:text-2xl">
+        {value}
+      </p>
+      <p className="mt-1 text-[11px] font-medium text-slate-500">{note}</p>
+    </article>
+  );
 }
 
 export default async function DashboardPage() {
   await connection();
   await requirePageCapability("dashboard.view");
 
-  const { start: todayStart, end: tomorrowStart } = getKigaliDayRange();
+  const now = new Date();
+  const todayStart = getKigaliDayStart(now);
+  const tomorrowStart = new Date(todayStart.getTime() + DAY_IN_MS);
+  const sevenDaysAgo = new Date(todayStart.getTime() - 6 * DAY_IN_MS);
+  const todayKey = getKigaliDateKey(now);
+
   const [
     rooms,
     items,
@@ -61,8 +141,11 @@ export default async function DashboardPage() {
     activeBookings,
     openOrders,
     todayOrderCount,
-    todayPaidStats,
+    paidOrdersWindow,
     todayItemsSold,
+    kitchenQueueCount,
+    activeStaffCount,
+    recentActivity,
   ] = await Promise.all([
     prisma.room.findMany({
       orderBy: [{ type: "asc" }, { number: "asc" }],
@@ -84,17 +167,21 @@ export default async function DashboardPage() {
       include: { room: true },
       orderBy: { expectedCheckoutAt: "asc" },
     }),
-    prisma.order.count({ where: { status: "OPEN" } }),
+    prisma.order.count({ where: { status: OrderStatus.OPEN } }),
     prisma.order.count({
       where: { createdAt: { gte: todayStart, lt: tomorrowStart } },
     }),
-    prisma.order.aggregate({
+    prisma.order.findMany({
       where: {
         status: OrderStatus.PAID,
-        paidAt: { gte: todayStart, lt: tomorrowStart },
+        paidAt: { gte: sevenDaysAgo, lt: tomorrowStart },
       },
-      _count: { _all: true },
-      _sum: { total: true },
+      select: {
+        paidAt: true,
+        total: true,
+        amountPaid: true,
+        paymentMethod: true,
+      },
     }),
     prisma.orderItem.aggregate({
       where: {
@@ -103,326 +190,234 @@ export default async function DashboardPage() {
       },
       _sum: { quantity: true },
     }),
+    prisma.orderItem.count({
+      where: {
+        station: ProductionStation.KITCHEN_MUCOMA,
+        kitchenStatus: { not: KitchenStatus.SERVED },
+        order: { status: OrderStatus.OPEN },
+      },
+    }),
+    prisma.user.count({ where: { active: true } }),
+    prisma.auditEvent.findMany({
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      include: { actor: { select: { fullName: true } } },
+    }),
   ]);
 
   const availableRooms = rooms.filter((room) => room.status === "AVAILABLE").length;
   const occupiedRooms = rooms.filter((room) => room.status === "OCCUPIED").length;
   const cleaningRooms = rooms.filter((room) => room.status === "CLEANING").length;
-  const lowStockItems = items.filter(
-    (item) => item.stock <= item.lowStockThreshold,
-  );
-  const todayRevenue = todayPaidStats._sum.total ?? 0;
-  const todayPaidOrders = todayPaidStats._count._all;
-  const todayItemsSoldCount = todayItemsSold._sum.quantity ?? 0;
-  const averagePaidOrder = todayPaidOrders
-    ? Math.round(todayRevenue / todayPaidOrders)
-    : 0;
+  const lowStockItems = items.filter((item) => item.stock <= item.lowStockThreshold);
+  const checkoutDueSoon = activeBookings.filter(
+    (booking) => booking.expectedCheckoutAt.getTime() <= now.getTime() + 2 * 60 * 60 * 1_000,
+  ).length;
   const occupancyRate = rooms.length
     ? Math.round((occupiedRooms / rooms.length) * 100)
     : 0;
 
-  const today = new Intl.DateTimeFormat("en-GB", {
+  const sevenDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(todayStart.getTime() - (6 - index) * DAY_IN_MS);
+    return {
+      key: getKigaliDateKey(date),
+      label: formatDayLabel(date),
+    };
+  });
+  const revenueByDay = new Map(sevenDays.map((day) => [day.key, 0]));
+  for (const order of paidOrdersWindow) {
+    if (!order.paidAt) continue;
+    const key = getKigaliDateKey(order.paidAt);
+    if (revenueByDay.has(key)) {
+      revenueByDay.set(key, (revenueByDay.get(key) ?? 0) + order.total);
+    }
+  }
+
+  const todayPaidOrders = paidOrdersWindow.filter(
+    (order) => order.paidAt && getKigaliDateKey(order.paidAt) === todayKey,
+  );
+  const todayRevenue = todayPaidOrders.reduce((sum, order) => sum + order.total, 0);
+  const todayItemsSoldCount = todayItemsSold._sum.quantity ?? 0;
+  const todayPaymentTotals = new Map<PaymentMethod, number>();
+  for (const order of todayPaidOrders) {
+    const method = order.paymentMethod ?? PaymentMethod.OTHER;
+    todayPaymentTotals.set(method, (todayPaymentTotals.get(method) ?? 0) + order.total);
+  }
+  const previousRevenue = sevenDays
+    .slice(0, 6)
+    .reduce((sum, day) => sum + (revenueByDay.get(day.key) ?? 0), 0);
+  const revenueDelta = previousRevenue
+    ? Math.round(((todayRevenue - previousRevenue) / previousRevenue) * 100)
+    : null;
+  const maxRevenue = Math.max(...sevenDays.map((day) => revenueByDay.get(day.key) ?? 0), 1);
+  const averagePaidOrder = todayPaidOrders.length
+    ? Math.round(todayRevenue / todayPaidOrders.length)
+    : 0;
+
+  const attentionItems = [
+    {
+      label: "Open orders",
+      value: openOrders,
+      detail: openOrders ? "Active tabs need attention" : "No active tabs",
+      href: "/orders",
+      icon: ShoppingCart,
+      tone: "bg-sky-50 text-sky-700",
+    },
+    {
+      label: "Checkout due soon",
+      value: checkoutDueSoon,
+      detail: checkoutDueSoon ? "Within the next 2 hours" : "No departures due",
+      href: "/rooms",
+      icon: Clock3,
+      tone: "bg-amber-50 text-amber-700",
+    },
+    {
+      label: "Kitchen queue",
+      value: kitchenQueueCount,
+      detail: kitchenQueueCount ? "Tickets waiting for Mucoma" : "Kitchen is clear",
+      href: "/kitchen",
+      icon: UtensilsCrossed,
+      tone: "bg-violet-50 text-violet-700",
+    },
+    {
+      label: "Low stock",
+      value: lowStockItems.length,
+      detail: lowStockItems.length ? "Items need refilling" : "Stock is healthy",
+      href: "/inventory",
+      icon: PackageOpen,
+      tone: "bg-emerald-50 text-emerald-700",
+    },
+  ];
+  const attentionCount = attentionItems.reduce((sum, item) => sum + item.value, 0);
+  const todayLabel = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
     timeZone: "Africa/Kigali",
-  }).format(new Date());
-
-  const metrics = [
-    {
-      label: "Rooms occupied",
-      value: `${occupiedRooms} / ${rooms.length}`,
-      note: `${occupancyRate}% occupancy`,
-      icon: BedDouble,
-      tone: "bg-forest-100 text-forest-800",
-    },
-    {
-      label: "Open orders",
-      value: openOrders.toString(),
-      note: `${todayOrderCount} orders today`,
-      icon: ShoppingCart,
-      tone: "bg-sky-100 text-sky-800",
-    },
-    {
-      label: "Available rooms",
-      value: availableRooms.toString(),
-      note: `${cleaningRooms} cleaning`,
-      icon: BedDouble,
-      tone: "bg-emerald-50 text-emerald-700",
-    },
-    {
-      label: "Low stock",
-      value: lowStockItems.length.toString(),
-      note: lowStockItems.length ? "Needs attention" : "Stock is healthy",
-      icon: PackageOpen,
-      tone: "bg-violet-100 text-violet-800",
-    },
-  ];
+  }).format(now);
 
   return (
-    <div className="space-y-6 pb-24 lg:space-y-8 lg:pb-0">
-      <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+    <div className="space-y-4 pb-28 lg:space-y-5 lg:pb-8">
+      <section className="flex flex-col justify-between gap-4 rounded-[22px] border border-white bg-white p-5 shadow-soft sm:flex-row sm:items-center sm:p-6">
         <div>
-          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-gold-600">
-            <BarChart3 className="h-3.5 w-3.5" />
-            Business overview
-          </p>
-          <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.035em] text-forest-950 sm:text-4xl">
-            Today at Umugano
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">{today}</p>
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-gold-600">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />Live business view</span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-400">{todayLabel}</span>
+          </div>
+          <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-forest-950 sm:text-4xl">Owner overview</h1>
+          <p className="mt-1.5 text-sm text-slate-500">A clear view of today&apos;s money, operations, and next actions.</p>
         </div>
-        <div className="flex gap-2.5">
-          <Link
-            href="/rooms"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-forest-200 bg-white px-4 text-sm font-bold text-forest-900 shadow-sm transition hover:border-forest-300"
-          >
-            <Plus className="h-4 w-4" />
-            New booking
+        <div className="flex flex-wrap gap-2">
+          <Link href="/rooms" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-forest-200 bg-white px-4 text-sm font-bold text-forest-900 transition hover:border-forest-300 hover:bg-forest-50">
+            <Plus className="h-4 w-4" />New booking
           </Link>
-          <Link
-            href="/pos"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gold-400 px-4 text-sm font-extrabold text-forest-950 shadow-[0_10px_24px_rgba(229,173,61,0.22)] transition hover:bg-gold-300"
-          >
-            <ShoppingCart className="h-4 w-4" />
-            Start order
+          <Link href="/pos" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-forest-900 px-4 text-sm font-extrabold text-white shadow-[0_10px_24px_rgba(18,55,42,0.16)] transition hover:bg-forest-800">
+            <ShoppingCart className="h-4 w-4" />Start order
           </Link>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-[24px] bg-forest-950 text-white shadow-[0_18px_45px_rgba(9,39,29,0.14)]">
-        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div>
-            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-300">
-              <WalletCards className="h-3.5 w-3.5" />
-              Today&apos;s income
-            </div>
-            <p className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-              {formatRWF(todayRevenue)}
-            </p>
-            <p className="mt-1 text-xs text-white/50">
-              {todayPaidOrders} paid order{todayPaidOrders === 1 ? "" : "s"} · Average {formatRWF(averagePaidOrder)}
-            </p>
-          </div>
-          <Link
-            href="/orders"
-            className="inline-flex h-11 items-center justify-center gap-2 self-start rounded-xl bg-white/10 px-4 text-xs font-extrabold text-white transition hover:bg-white/15 sm:self-auto"
-          >
-            View orders
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 border-t border-white/10 sm:grid-cols-4">
-          <div className="border-r border-white/10 px-5 py-4 sm:px-6">
-            <p className="text-xl font-black">{todayOrderCount}</p>
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/40">Orders today</p>
-          </div>
-          <div className="px-5 py-4 sm:border-r sm:border-white/10 sm:px-6">
-            <p className="text-xl font-black">{todayPaidOrders}</p>
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/40">Paid today</p>
-          </div>
-          <div className="border-r border-white/10 px-5 py-4 sm:px-6">
-            <p className="text-xl font-black">{todayItemsSoldCount}</p>
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/40">Items sold</p>
-          </div>
-          <div className="px-5 py-4 sm:px-6">
-            <p className="text-xl font-black">{activeBookings.length}</p>
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/40">Active guests</p>
-          </div>
         </div>
       </section>
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {metrics.map((metric) => {
-          const Icon = metric.icon;
-
-          return (
-            <article
-              key={metric.label}
-              className="rounded-[22px] border border-white bg-white p-4 shadow-soft sm:p-5"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className={`grid h-10 w-10 place-items-center rounded-xl ${metric.tone}`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <ArrowUpRight className="h-4 w-4 text-slate-300" />
-              </div>
-              <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                {metric.label}
-              </p>
-              <p className="mt-1.5 truncate text-xl font-black tracking-[-0.035em] text-forest-950 sm:text-2xl">
-                {metric.value}
-              </p>
-              <p className="mt-1 text-[11px] font-medium text-slate-500">{metric.note}</p>
-            </article>
-          );
-        })}
+        <MetricCard label="Today&apos;s income" value={formatRWF(todayRevenue)} note={`${todayPaidOrders.length} paid orders`} icon={WalletCards} tone="bg-forest-100 text-forest-800" />
+        <MetricCard label="Orders today" value={todayOrderCount.toString()} note={`${openOrders} currently open`} icon={ShoppingCart} tone="bg-sky-100 text-sky-800" />
+        <MetricCard label="Average paid order" value={formatRWF(averagePaidOrder)} note={`${todayItemsSoldCount} items sold`} icon={BarChart3} tone="bg-amber-100 text-amber-800" />
+        <MetricCard label="Rooms occupied" value={`${occupiedRooms} / ${rooms.length}`} note={`${occupancyRate}% occupancy`} icon={BedDouble} tone="bg-violet-100 text-violet-800" />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.55fr_0.85fr]">
-        <article className="overflow-hidden rounded-[26px] border border-white bg-white shadow-soft">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-5 sm:px-6">
+      <section className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+        <article className="rounded-[22px] border border-white bg-white p-5 shadow-soft sm:p-6">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
             <div>
-              <h2 className="text-base font-extrabold text-forest-950">Room overview</h2>
-              <p className="mt-1 text-xs text-slate-400">Live accommodation status</p>
+              <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-gold-600"><TrendingUp className="h-3.5 w-3.5" />Revenue performance</div>
+              <p className="mt-2 text-xs text-slate-400">Paid sales for the last seven days</p>
             </div>
-            <Link
-              href="/rooms"
-              className="flex items-center gap-1 text-xs font-bold text-forest-700 hover:text-forest-950"
-            >
-              Manage rooms
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Link>
+            <div className="text-left sm:text-right">
+              <p className="text-2xl font-black tracking-[-0.04em] text-forest-950">{formatRWF(todayRevenue)}</p>
+              <p className={`mt-1 flex items-center gap-1 text-[10px] font-extrabold sm:justify-end ${revenueDelta !== null && revenueDelta < 0 ? "text-red-600" : "text-emerald-600"}`}>
+                {revenueDelta !== null && revenueDelta < 0 ? <TrendingDown className="h-3 w-3" /> : <TrendingUp className="h-3 w-3" />}
+                {revenueDelta === null ? "No previous sales to compare" : `${revenueDelta >= 0 ? "+" : ""}${revenueDelta}% vs previous 6 days`}
+              </p>
+            </div>
           </div>
-
-          <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
-            {rooms.map((room) => {
-              const activeBooking = room.bookings[0];
-
+          <div className="mt-7 flex h-40 items-end gap-2 sm:gap-3">
+            {sevenDays.map((day, index) => {
+              const value = revenueByDay.get(day.key) ?? 0;
+              const height = value ? Math.max((value / maxRevenue) * 100, 8) : 3;
+              const isToday = index === sevenDays.length - 1;
               return (
-                <div
-                  key={room.id}
-                  className="group rounded-2xl border border-slate-100 bg-slate-50/65 p-4 transition hover:border-forest-200 hover:bg-white"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-extrabold text-forest-950">{room.number}</p>
-                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                        {room.type === "VIP" ? "VIP suite" : "Standard room"}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold tracking-wide ${roomStatusStyles[room.status]}`}
-                    >
-                      {room.status}
-                    </span>
+                <div key={day.key} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                  <span className="truncate text-[9px] font-bold text-slate-400">{value ? formatCompactRWF(value) : "—"}</span>
+                  <div className="flex h-28 w-full items-end rounded-t-lg bg-slate-50 p-1">
+                    <div className={`w-full rounded-md transition-all ${isToday ? "bg-gold-400" : "bg-forest-200"}`} style={{ height: `${height}%` }} />
                   </div>
-                  <div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-3">
-                    <div>
-                      <p className="text-[10px] text-slate-400">
-                        {activeBooking ? activeBooking.guestName : `${room.capacity} guests`}
-                      </p>
-                      <p className="mt-1 text-[11px] font-bold text-slate-600">
-                        {activeBooking
-                          ? `Out ${formatTime(activeBooking.expectedCheckoutAt)}`
-                          : `${formatRWF(room.dailyRate)} / night`}
-                      </p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-forest-600" />
-                  </div>
+                  <span className={`text-[10px] font-bold ${isToday ? "text-forest-950" : "text-slate-400"}`}>{day.label}</span>
                 </div>
               );
             })}
           </div>
         </article>
 
-        <div className="space-y-6">
-          <article className="rounded-[26px] bg-forest-950 p-5 text-white shadow-[0_20px_50px_rgba(9,39,29,0.16)] sm:p-6">
-            <div className="flex items-center justify-between">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/8 text-gold-300">
-                <UtensilsCrossed className="h-5 w-5" />
-              </div>
-              <span className="rounded-full bg-emerald-400/12 px-3 py-1.5 text-[10px] font-extrabold text-emerald-300">
-                KITCHEN READY
-              </span>
+        <article className="rounded-[22px] border border-white bg-white p-5 shadow-soft sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-gold-600"><CircleAlert className="h-3.5 w-3.5" />Needs attention</div>
+              <p className="mt-2 text-xs text-slate-400">Items that may need a decision today</p>
             </div>
-            <h2 className="mt-6 font-display text-2xl font-semibold">Bar &amp; kitchen</h2>
-            <p className="mt-2 text-sm leading-6 text-white/55">
-              {items.length} active menu items ready for mobile ordering and table service.
-            </p>
-            <div className="mt-6 grid grid-cols-3 gap-2 border-t border-white/10 pt-5 text-center">
-              <div>
-                <p className="text-lg font-black">{items.filter((item) => item.category === "BEER").length}</p>
-                <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">Beers</p>
-              </div>
-              <div>
-                <p className="text-lg font-black">{items.filter((item) => item.category === "FOOD").length}</p>
-                <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">Kitchen</p>
-              </div>
-              <div>
-                <p className="text-lg font-black">{lowStockItems.length}</p>
-                <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">Low stock</p>
-              </div>
-            </div>
-            <Link
-              href="/inventory"
-              className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white text-xs font-extrabold text-forest-950 transition hover:bg-gold-100"
-            >
-              <PackageOpen className="h-4 w-4" />
-              View inventory
-            </Link>
-          </article>
-
-          <article className="rounded-[26px] border border-white bg-white p-5 shadow-soft sm:p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-extrabold text-forest-950">Arrivals &amp; departures</h2>
-              <Clock3 className="h-4 w-4 text-gold-600" />
-            </div>
-            <div className="mt-4 space-y-3">
-              {activeBookings.length ? (
-                activeBookings.slice(0, 3).map((booking) => (
-                  <div
-                    key={booking.id}
-                    className="flex items-center justify-between rounded-2xl bg-slate-50 p-3.5"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-forest-100 text-xs font-black text-forest-800">
-                        {booking.room.number.replace("Room ", "")}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-extrabold text-forest-950">
-                          {booking.guestName}
-                        </p>
-                        <p className="mt-1 text-[10px] text-slate-400">{booking.bookingCode}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold text-slate-600">
-                        {formatTime(booking.expectedCheckoutAt)}
-                      </p>
-                      <p className="mt-1 text-[9px] uppercase tracking-wide text-slate-400">Checkout</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="rounded-2xl bg-slate-50 p-4 text-xs text-slate-500">
-                  No active guest stays.
-                </p>
-              )}
-            </div>
-          </article>
-        </div>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${attentionCount ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{attentionCount ? `${attentionCount} open` : "All clear"}</span>
+          </div>
+          <div className="mt-5 space-y-2">
+            {attentionItems.map((item) => {
+              const Icon = item.icon;
+              return <Link key={item.label} href={item.href} className="group flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-forest-200 hover:bg-forest-50/50">
+                <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${item.tone}`}><Icon className="h-4 w-4" /></div>
+                <div className="min-w-0 flex-1"><p className="text-xs font-extrabold text-forest-950">{item.label}</p><p className="mt-1 truncate text-[10px] text-slate-400">{item.detail}</p></div>
+                <span className="text-lg font-black text-forest-950">{item.value}</span><ChevronRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-forest-600" />
+              </Link>;
+            })}
+          </div>
+        </article>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <div className="flex items-center gap-3 rounded-2xl border border-white bg-white p-4 shadow-soft">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
-            <BedDouble className="h-5 w-5" />
+      <section className="grid gap-4 xl:grid-cols-3">
+        <article className="rounded-[22px] border border-white bg-white p-5 shadow-soft sm:p-6">
+          <div className="flex items-center justify-between"><div><h2 className="text-sm font-extrabold text-forest-950">Payment mix</h2><p className="mt-1 text-[10px] text-slate-400">Today&apos;s paid sales</p></div><WalletCards className="h-4 w-4 text-gold-600" /></div>
+          <div className="mt-5 space-y-3">
+            {Object.values(PaymentMethod).map((method) => {
+              const value = todayPaymentTotals.get(method) ?? 0;
+              const percentage = todayRevenue ? Math.round((value / todayRevenue) * 100) : 0;
+              return <div key={method}><div className="flex items-center justify-between gap-3 text-[10px] font-bold"><span className="text-slate-600">{paymentLabels[method]}</span><span className="text-slate-400">{percentage ? `${percentage}% · ${formatCompactRWF(value)}` : "—"}</span></div><div className="mt-1.5 h-1.5 rounded-full bg-slate-100"><div className="h-1.5 rounded-full bg-forest-700" style={{ width: `${percentage}%` }} /></div></div>;
+            })}
           </div>
-          <div>
-            <p className="text-sm font-black text-forest-950">{availableRooms} available</p>
-            <p className="text-[10px] text-slate-400">Ready for walk-ins</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-white bg-white p-4 shadow-soft">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-sky-50 text-sky-700">
-            <WalletCards className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-black text-forest-950">{cleaningRooms} cleaning</p>
-            <p className="text-[10px] text-slate-400">Housekeeping queue</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-white bg-white p-4 shadow-soft">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
-            <UtensilsCrossed className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-black text-forest-950">{tables} service points</p>
-            <p className="text-[10px] text-slate-400">Bar, garden &amp; VIP lounge</p>
-          </div>
-        </div>
+          {!todayPaidOrders.length && <p className="mt-5 rounded-xl bg-slate-50 p-3 text-center text-[10px] text-slate-400">No payments recorded today.</p>}
+        </article>
+
+        <article className="rounded-[22px] border border-white bg-white p-5 shadow-soft sm:p-6">
+          <div className="flex items-center justify-between"><div><h2 className="text-sm font-extrabold text-forest-950">Live operations</h2><p className="mt-1 text-[10px] text-slate-400">Current business state</p></div><Activity className="h-4 w-4 text-gold-600" /></div>
+          <div className="mt-4 divide-y divide-slate-100">{[
+            { label: "Rooms", value: `${occupiedRooms} / ${rooms.length}`, note: `${availableRooms} available · ${cleaningRooms} cleaning`, icon: BedDouble },
+            { label: "Service points", value: tables.toString(), note: "Bar, garden and VIP", icon: UtensilsCrossed },
+            { label: "Kitchen queue", value: kitchenQueueCount.toString(), note: kitchenQueueCount ? "Tickets need service" : "Queue is clear", icon: UtensilsCrossed },
+            { label: "Active team", value: activeStaffCount.toString(), note: "Owner-created accounts", icon: Users },
+          ].map((item) => { const Icon = item.icon; return <div key={item.label} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"><div className="grid h-8 w-8 place-items-center rounded-lg bg-slate-50 text-forest-700"><Icon className="h-4 w-4" /></div><div className="min-w-0 flex-1"><p className="text-xs font-extrabold text-forest-950">{item.label}</p><p className="mt-1 truncate text-[10px] text-slate-400">{item.note}</p></div><span className="text-sm font-black text-forest-950">{item.value}</span></div>; })}</div>
+        </article>
+
+        <article className="rounded-[22px] border border-white bg-white p-5 shadow-soft sm:p-6">
+          <div className="flex items-center justify-between"><div><h2 className="text-sm font-extrabold text-forest-950">Recent activity</h2><p className="mt-1 text-[10px] text-slate-400">Latest audited actions</p></div><Link href="/activity" className="text-[10px] font-extrabold text-forest-700 hover:text-forest-950">View all</Link></div>
+          <div className="mt-4 space-y-3">{recentActivity.length ? recentActivity.map((event) => <div key={event.id} className="flex items-start gap-2.5"><div className="mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-slate-50 text-slate-500"><Activity className="h-3 w-3" /></div><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-extrabold text-forest-950">{formatAction(event.action)}</p><p className="mt-1 truncate text-[9px] text-slate-400">{event.actor?.fullName ?? "System"} · {formatTime(event.createdAt)}</p></div></div>) : <p className="py-5 text-center text-xs text-slate-400">No recent activity.</p>}</div>
+        </article>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <article className="rounded-[22px] border border-white bg-white p-5 shadow-soft sm:p-6">
+          <div className="flex items-center justify-between"><div><h2 className="text-sm font-extrabold text-forest-950">Room status</h2><p className="mt-1 text-[10px] text-slate-400">A quick view of accommodation</p></div><Link href="/rooms" className="flex items-center gap-1 text-[10px] font-extrabold text-forest-700">Manage rooms<ChevronRight className="h-3.5 w-3.5" /></Link></div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">{rooms.slice(0, 4).map((room) => { const booking = room.bookings[0]; return <Link href="/rooms" key={room.id} className="group flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-forest-200 hover:bg-forest-50/40"><div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-black ${room.status === "OCCUPIED" ? "bg-amber-50 text-amber-700" : room.status === "CLEANING" ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700"}`}>{room.number.replace("Room ", "")}</div><div className="min-w-0 flex-1"><p className="text-xs font-extrabold text-forest-950">Room {room.number}</p><p className="mt-1 truncate text-[10px] text-slate-400">{booking?.guestName ?? `${room.capacity} guests`}</p></div><span className={`rounded-full px-2 py-1 text-[8px] font-extrabold ${roomStatusStyles[room.status]}`}>{room.status}</span><ChevronRight className="h-3.5 w-3.5 text-slate-300 transition group-hover:text-forest-600" /></Link>; })}</div>
+        </article>
+
+        <article className="rounded-[22px] border border-white bg-white p-5 shadow-soft sm:p-6">
+          <div className="flex items-center justify-between"><div><h2 className="text-sm font-extrabold text-forest-950">Arrivals &amp; departures</h2><p className="mt-1 text-[10px] text-slate-400">Guests with the nearest checkout</p></div><Clock3 className="h-4 w-4 text-gold-600" /></div>
+          <div className="mt-4 space-y-2">{activeBookings.length ? activeBookings.slice(0, 4).map((booking) => <Link href="/rooms" key={booking.id} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 transition hover:bg-forest-50"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-[10px] font-black text-forest-800">{booking.room.number.replace("Room ", "")}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-extrabold text-forest-950">{booking.guestName}</p><p className="mt-1 truncate text-[10px] text-slate-400">{booking.bookingCode}</p></div><div className="text-right"><p className="text-[10px] font-extrabold text-forest-950">{formatTime(booking.expectedCheckoutAt)}</p><p className="mt-1 text-[9px] text-slate-400">Checkout</p></div></Link>) : <p className="rounded-xl bg-slate-50 p-5 text-center text-xs text-slate-400">No active guest stays.</p>}</div>
+        </article>
       </section>
     </div>
   );
