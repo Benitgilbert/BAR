@@ -157,7 +157,9 @@ export async function requireCapability(capability: Capability) {
 export async function requirePageCapability(capability: Capability) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!user.capabilities.has(capability)) redirect("/");
+  if (!user.capabilities.has(capability)) {
+    redirect(user.role === "MUCOMA" ? "/kitchen" : "/");
+  }
   return user;
 }
 

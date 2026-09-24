@@ -25,9 +25,9 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const result = (await response.json()) as { error?: string };
+      const result = (await response.json()) as { error?: string; user?: { role?: string } };
       if (!response.ok) throw new Error(result.error || "Unable to sign in");
-      router.push("/");
+      router.push(result.user?.role === "MUCOMA" ? "/kitchen" : "/");
       router.refresh();
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Unable to sign in");
