@@ -5,7 +5,6 @@ import {
   PaymentMethod,
   Prisma,
   ProductionStation,
-  StaffRole,
   StockMovementType,
 } from "@prisma/client";
 
@@ -113,19 +112,14 @@ export function createTicketNumber(roundNumber: number) {
 
 export async function resolveWaiter(
   transaction: Prisma.TransactionClient,
-  waiterId?: string | null,
+  waiterId: string,
 ) {
-  const waiter = waiterId
-    ? await transaction.user.findFirst({
-        where: { id: waiterId, active: true },
-      })
-    : await transaction.user.findFirst({
-        where: { role: StaffRole.FRONT_DESK, active: true },
-        orderBy: { createdAt: "asc" },
-      });
+  const waiter = await transaction.user.findFirst({
+    where: { id: waiterId, active: true },
+  });
 
   if (!waiter) {
-    throw new Error("No active waiter is configured");
+    throw new Error("The active order taker could not be found");
   }
 
   return waiter;

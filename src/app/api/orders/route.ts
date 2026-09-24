@@ -28,8 +28,6 @@ interface OrderRequest {
   bookingId?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
-  cashierId?: string | null;
-  waiterId?: string | null;
   paymentMethod?: string | null;
   notes?: string | null;
   dispatch?: boolean;
@@ -152,7 +150,7 @@ export async function POST(request: Request) {
         });
       }
 
-      const waiter = await resolveWaiter(transaction, body.waiterId);
+      const waiter = await resolveWaiter(transaction, actor.id);
       const itemIds = [...requestedQuantities.keys()];
       const items = await transaction.item.findMany({
         where: { id: { in: itemIds }, active: true },
@@ -197,7 +195,7 @@ export async function POST(request: Request) {
             settlementStatus: instantPay ? "PAID" : "PENDING",
             tableId: orderType === OrderType.TABLE ? body.tableId : null,
             bookingId: orderType === OrderType.ROOM ? body.bookingId : null,
-            cashierId: body.cashierId,
+            cashierId: actor.id,
             waiterId: waiter.id,
             customerName: body.customerName?.trim() || null,
             customerPhone: body.customerPhone?.trim() || null,

@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomUUID } from "node:crypto";
 
 import {
   ItemCategory,
@@ -13,30 +14,15 @@ import {
 const prisma = new PrismaClient();
 
 const defaultPassword = "ChangeMe123!";
+const ownerId = randomUUID();
 const staff = [
   {
-    id: "staff-owner",
-    fullName: "Benit Gilbert",
-    email: "owner@umugano.rw",
-    phone: "+250 78X XXX XXX",
+    id: ownerId,
+    fullName: process.env.OWNER_NAME ?? "Benit Gilbert",
+    email: (process.env.OWNER_EMAIL ?? "owner@umugano.rw").toLowerCase(),
+    phone: process.env.OWNER_PHONE ?? "+250 78X XXX XXX",
     passwordHash: bcrypt.hashSync(process.env.OWNER_PASSWORD ?? defaultPassword, 12),
     role: StaffRole.OWNER,
-  },
-  {
-    id: "staff-mucoma",
-    fullName: "Grace Mukamana",
-    email: "mucoma@umugano.rw",
-    phone: "+250 78X XXX XXX",
-    passwordHash: bcrypt.hashSync(process.env.MUCOMA_PASSWORD ?? defaultPassword, 12),
-    role: StaffRole.MUCOMA,
-  },
-  {
-    id: "staff-front-desk",
-    fullName: "Alice Uwase",
-    email: "reception@umugano.rw",
-    phone: "+250 78X XXX XXX",
-    passwordHash: bcrypt.hashSync(process.env.FRONT_DESK_PASSWORD ?? defaultPassword, 12),
-    role: StaffRole.FRONT_DESK,
   },
 ];
 
@@ -362,7 +348,7 @@ async function main() {
       settlementStatus: "PENDING",
       checkedInAt,
       expectedCheckoutAt,
-      createdById: "staff-front-desk",
+      createdById: ownerId,
       notes: "Guest requested a quiet room.",
     },
   });

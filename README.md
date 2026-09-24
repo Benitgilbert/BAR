@@ -13,7 +13,7 @@ Hospitality management system for **Umugano Bar & Guest House** in Byumba, Rwand
 - Thermal receipts with RWF totals and MoMo merchant details
 - Room check-in, availability, cleaning, and active booking dashboard
 - Orders ledger, stock ledger, low-stock indicators, and seeded catalog
-- Prisma schema and seed data for staff, rooms, bookings, tables, menu items, rounds, and orders
+- Owner-created staff accounts with hiring, activation/deactivation, password resets, and role-based access
 
 ## Stack
 
@@ -79,6 +79,10 @@ Open [http://localhost:3000](http://localhost:3000).
 - `POST /api/orders/:id/dispatch` — dispatch pending rounds and return station ticket payloads
 - `POST /api/orders/:id/settle` — settle an order and return the final receipt payload
 - `POST /api/bookings` — check a guest into a room
+- `GET/POST /api/users` — list or hire worker accounts
+- `PATCH/DELETE /api/users/:id` — update, reset, deactivate, or reactivate an account
+- `GET/POST /api/access/grants` — review or grant capabilities
+- `GET /api/audit` — review the append-only activity history
 
 ## Authentication and roles
 
@@ -90,15 +94,19 @@ The system uses three roles:
 
 Each worker signs in with their own email and password. The Owner can grant temporary or permanent capabilities from `/access`. Grants are recorded, can expire, and can be revoked immediately.
 
-Seed password variables:
+Seed owner variables:
 
 ```env
+OWNER_EMAIL=...
+OWNER_NAME=...
 OWNER_PASSWORD=...
-FRONT_DESK_PASSWORD=...
-MUCOMA_PASSWORD=...
 ```
 
-The development seed fallback password is `ChangeMe123!`; change it before deployment. To update passwords without resetting business data, set the password environment variables and run `npm run db:passwords`. Passwords are never committed.
+The seed creates only this bootstrap Owner. The development fallback password is `ChangeMe123!`; change it before deployment. To update the Owner password without resetting business data, set `OWNER_EMAIL` and `OWNER_PASSWORD`, then run `npm run db:passwords`. Passwords are never committed.
+
+## Team and hiring
+
+The seed creates only one bootstrap Owner. The Owner creates all other worker accounts from `/team`; no worker emails or IDs are hardcoded into the application. New accounts receive a temporary password shown once to the Owner. The Owner can deactivate/reactivate accounts and reset passwords. Every account action is audited.
 
 ## Audit and stock movements
 

@@ -13,6 +13,7 @@ import {
   LogOut,
   PackageOpen,
   ShoppingCart,
+  Users,
   Wifi,
   X,
 } from "lucide-react";
@@ -33,6 +34,7 @@ const navigation: Array<{ label: string; href: string; icon: typeof LayoutDashbo
   { label: "Kitchen", href: "/kitchen", icon: ChefHat, roles: ["OWNER", "FRONT_DESK", "MUCOMA"] },
   { label: "Activity", href: "/activity", icon: History, roles: ["OWNER"] },
   { label: "Access", href: "/access", icon: KeyRound, roles: ["OWNER"] },
+  { label: "Team", href: "/team", icon: Users, roles: ["OWNER"] },
 ];
 
 function visibleNavigation(role: StaffRoleName | undefined) {
