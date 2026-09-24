@@ -102,7 +102,7 @@ OWNER_NAME=...
 OWNER_PASSWORD=...
 ```
 
-The seed creates only this bootstrap Owner. The development fallback password is `ChangeMe123!`; change it before deployment. To update the Owner password without resetting business data, set `OWNER_EMAIL` and `OWNER_PASSWORD`, then run `npm run db:passwords`. Passwords are never committed.
+The seed creates only this bootstrap Owner. The development fallback password is `ChangeMe123!`; change it before deployment. To update the Owner name, email, or password without resetting business data, set `OWNER_EMAIL`, `OWNER_NAME`, and `OWNER_PASSWORD`, then run `npm run db:passwords`. Passwords are never committed.
 
 ## Team and hiring
 

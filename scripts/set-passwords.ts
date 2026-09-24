@@ -1,21 +1,29 @@
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, StaffRole } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = (process.env.OWNER_EMAIL ?? "owner@umugano.rw").toLowerCase();
+  const requestedEmail = process.env.OWNER_EMAIL?.trim().toLowerCase() || undefined;
+  const requestedName = process.env.OWNER_NAME?.trim() || undefined;
   const password = process.env.OWNER_PASSWORD;
   if (!password) throw new Error("OWNER_PASSWORD is required");
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) throw new Error(`Owner not found: ${email}`);
+  const user = requestedEmail
+    ? (await prisma.user.findUnique({ where: { email: requestedEmail } })) ??
+      (await prisma.user.findFirst({ where: { role: StaffRole.OWNER }, orderBy: { createdAt: "asc" } }))
+    : await prisma.user.findFirst({ where: { role: StaffRole.OWNER }, orderBy: { createdAt: "asc" } });
+  if (!user) throw new Error("No Owner account found");
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash: await bcrypt.hash(password, 12) },
+    data: {
+      ...(requestedEmail ? { email: requestedEmail } : {}),
+      ...(requestedName ? { fullName: requestedName } : {}),
+      passwordHash: await bcrypt.hash(password, 12),
+    },
   });
-  console.log(`Updated password for ${email}`);
+  console.log(`Updated Owner account: ${requestedEmail ?? user.email}`);
 }
 
 main()
