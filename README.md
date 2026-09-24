@@ -98,7 +98,7 @@ FRONT_DESK_PASSWORD=...
 MUCOMA_PASSWORD=...
 ```
 
-The development seed fallback password is `ChangeMe123!`; change it before deployment. Passwords are never committed.
+The development seed fallback password is `ChangeMe123!`; change it before deployment. To update passwords without resetting business data, set the password environment variables and run `npm run db:passwords`. Passwords are never committed.
 
 ## Audit and stock movements
 

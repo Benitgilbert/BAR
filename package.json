@@ -10,6 +10,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push --skip-generate",
     "db:seed": "prisma db seed",
+    "db:passwords": "tsx scripts/set-passwords.ts",
     "db:studio": "prisma studio",
     "setup": "prisma generate && prisma db push --skip-generate && prisma db seed",
     "check": "npm run lint && npm run build"
