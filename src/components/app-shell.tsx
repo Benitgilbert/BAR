@@ -2,37 +2,49 @@
 
 import {
   BedDouble,
+  ChefHat,
   ChevronRight,
   ClipboardList,
+  History,
+  KeyRound,
   LayoutDashboard,
   MapPin,
   Menu,
+  LogOut,
   PackageOpen,
   ShoppingCart,
   Wifi,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 
 import { BrandLogo } from "@/components/brand-logo";
 import { businessConfig } from "@/config/business";
+import type { StaffRoleName } from "@/lib/permissions";
 
-const navigation = [
-  { label: "Overview", href: "/", icon: LayoutDashboard },
-  { label: "Point of Sale", href: "/pos", icon: ShoppingCart },
-  { label: "Rooms", href: "/rooms", icon: BedDouble },
-  { label: "Orders", href: "/orders", icon: ClipboardList },
-  { label: "Inventory", href: "/inventory", icon: PackageOpen },
+const navigation: Array<{ label: string; href: string; icon: typeof LayoutDashboard; roles: StaffRoleName[] }> = [
+  { label: "Overview", href: "/", icon: LayoutDashboard, roles: ["OWNER", "FRONT_DESK"] },
+  { label: "Point of Sale", href: "/pos", icon: ShoppingCart, roles: ["OWNER", "FRONT_DESK"] },
+  { label: "Rooms", href: "/rooms", icon: BedDouble, roles: ["OWNER", "FRONT_DESK"] },
+  { label: "Orders", href: "/orders", icon: ClipboardList, roles: ["OWNER", "FRONT_DESK"] },
+  { label: "Inventory", href: "/inventory", icon: PackageOpen, roles: ["OWNER", "FRONT_DESK"] },
+  { label: "Kitchen", href: "/kitchen", icon: ChefHat, roles: ["OWNER", "FRONT_DESK", "MUCOMA"] },
+  { label: "Activity", href: "/activity", icon: History, roles: ["OWNER"] },
+  { label: "Access", href: "/access", icon: KeyRound, roles: ["OWNER"] },
 ];
 
-function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
+function visibleNavigation(role: StaffRoleName | undefined) {
+  return navigation.filter((item) => !role || item.roles.includes(role));
+}
+
+function NavigationLinks({ onNavigate, role }: { onNavigate?: () => void; role?: StaffRoleName }) {
   const pathname = usePathname();
 
   return (
     <nav className="flex items-center gap-1" aria-label="Primary navigation">
-      {navigation.map((item) => {
+      {visibleNavigation(role).map((item) => {
         const isActive =
           item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         const Icon = item.icon;
@@ -58,7 +70,7 @@ function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function Drawer({ onClose }: { onClose: () => void }) {
+function Drawer({ onClose, role }: { onClose: () => void; role?: StaffRoleName }) {
   const pathname = usePathname();
 
   return (
@@ -83,7 +95,7 @@ function Drawer({ onClose }: { onClose: () => void }) {
         </div>
 
         <nav className="mt-6 space-y-2" aria-label="Mobile navigation">
-          {navigation.map((item) => {
+          {visibleNavigation(role).map((item) => {
             const isActive =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const Icon = item.icon;
@@ -123,9 +135,26 @@ function Drawer({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  currentUser,
+}: {
+  children: ReactNode;
+  currentUser: { fullName: string; role: string; roleLabel: string } | null;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
+
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-canvas text-slate-900">
@@ -151,7 +180,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="hidden lg:block">
-            <NavigationLinks />
+            <NavigationLinks role={currentUser?.role as StaffRoleName | undefined} />
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
@@ -159,20 +188,25 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Wifi className="h-3.5 w-3.5" />
               Online
             </div>
-            <div className="grid h-10 w-10 place-items-center rounded-full bg-forest-100 text-sm font-extrabold text-forest-900 ring-4 ring-canvas">
-              AU
+            <div className="grid h-10 w-10 place-items-center rounded-full bg-forest-100 text-xs font-extrabold text-forest-900 ring-4 ring-canvas">
+              {currentUser?.fullName.split(" ").map((part) => part[0]).slice(0, 2).join("") ?? "UG"}
             </div>
             <div className="hidden leading-tight md:block">
-              <p className="text-xs font-bold text-forest-950">Alice Uwase</p>
+              <p className="text-xs font-bold text-forest-950">{currentUser?.fullName ?? "Guest"}</p>
               <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Receptionist
+                {currentUser?.roleLabel ?? "Sign in required"}
               </p>
             </div>
+            {currentUser && (
+              <button type="button" onClick={logout} className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Sign out" title="Sign out">
+                <LogOut className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      {menuOpen && <Drawer onClose={() => setMenuOpen(false)} />}
+      {menuOpen && <Drawer role={currentUser?.role as StaffRoleName | undefined} onClose={() => setMenuOpen(false)} />}
 
       <main className="app-main mx-auto min-h-[calc(100vh-72px)] max-w-[1600px] px-4 py-5 sm:px-6 sm:py-7 lg:min-h-[calc(100vh-80px)] lg:px-8 lg:py-8">
         {children}
@@ -182,7 +216,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="mobile-nav-safe fixed inset-x-3 z-30 flex min-h-[68px] items-center justify-around rounded-2xl border border-white/70 bg-forest-950/96 px-2 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2 text-white shadow-[0_18px_50px_rgba(9,39,29,0.35)] backdrop-blur-xl lg:hidden"
         aria-label="Quick navigation"
       >
-        {navigation.slice(0, 4).map((item) => {
+        {visibleNavigation(currentUser?.role as StaffRoleName | undefined).slice(0, 4).map((item) => {
           const isActive =
             item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;

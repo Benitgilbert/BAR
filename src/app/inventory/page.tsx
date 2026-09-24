@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 
 import { InventoryManager } from "@/components/inventory-manager";
-import { canManageCatalog, getConfiguredRole, roleLabels } from "@/lib/permissions";
+import { roleLabels } from "@/lib/permissions";
+import { requirePageCapability } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { InventoryItem } from "@/types/hospitality";
 
@@ -13,8 +14,9 @@ export const metadata: Metadata = {
 
 export default async function InventoryPage() {
   await connection();
+  const user = await requirePageCapability("products.manage");
 
-  const role = getConfiguredRole();
+  const role = user.role;
   const [items] = await Promise.all([
     prisma.item.findMany({
       orderBy: [{ active: "desc" }, { category: "asc" }, { name: "asc" }],
@@ -39,7 +41,7 @@ export default async function InventoryPage() {
   return (
     <InventoryManager
       initialItems={inventoryItems}
-      canManage={canManageCatalog(role)}
+      canManage={user.capabilities.has("products.manage")}
       roleLabel={roleLabels[role]}
     />
   );

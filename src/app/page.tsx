@@ -14,6 +14,7 @@ import {
 import { connection } from "next/server";
 import Link from "next/link";
 
+import { requirePageCapability } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatRWF } from "@/config/business";
 
@@ -33,6 +34,7 @@ function formatTime(value: Date) {
 
 export default async function DashboardPage() {
   await connection();
+  const user = await requirePageCapability("dashboard.view");
 
   const [rooms, items, tables, activeBookings, openOrders] = await Promise.all([
     prisma.room.findMany({
@@ -120,7 +122,7 @@ export default async function DashboardPage() {
             {today}
           </p>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.035em] text-forest-950 sm:text-4xl">
-            Good afternoon, Alice.
+            Good afternoon, {user.fullName.split(" ")[0]}.
           </h1>
           <p className="mt-2 text-sm text-slate-500">
             Here&apos;s what&apos;s happening at Umugano today.

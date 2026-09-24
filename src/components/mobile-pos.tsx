@@ -832,7 +832,7 @@ export function MobilePos({
         orderId: activeOrder?.id ?? null,
         tableId: type === "TABLE" ? tableId : null,
         bookingId: type === "ROOM" ? bookingId : null,
-        waiterId: "staff-waiter",
+        waiterId: "staff-front-desk",
         paymentMethod: "CASH",
         notes: notes.trim() || null,
         dispatch,

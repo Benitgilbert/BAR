@@ -3,6 +3,7 @@ import { connection } from "next/server";
 
 import { MobilePos } from "@/components/mobile-pos";
 import { orderDetailsInclude, serializeOrder } from "@/lib/order-service";
+import { requirePageCapability } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { OpenPosOrder, PosBooking, PosItem, PosTable } from "@/types/hospitality";
 
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
 
 export default async function PosPage() {
   await connection();
+  await requirePageCapability("pos.use");
 
   const [items, tables, bookings, openOrders] = await Promise.all([
     prisma.item.findMany({

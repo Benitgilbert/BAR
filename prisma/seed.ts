@@ -1,3 +1,5 @@
+import bcrypt from "bcryptjs";
+
 import {
   ItemCategory,
   PrismaClient,
@@ -10,34 +12,31 @@ import {
 
 const prisma = new PrismaClient();
 
+const defaultPassword = "ChangeMe123!";
 const staff = [
   {
-    id: "staff-admin",
-    fullName: "Umugano Administrator",
-    email: "admin@umugano.rw",
+    id: "staff-owner",
+    fullName: "Benit Gilbert",
+    email: "owner@umugano.rw",
     phone: "+250 78X XXX XXX",
-    role: StaffRole.ADMIN,
+    passwordHash: bcrypt.hashSync(process.env.OWNER_PASSWORD ?? defaultPassword, 12),
+    role: StaffRole.OWNER,
   },
   {
     id: "staff-mucoma",
     fullName: "Grace Mukamana",
     email: "mucoma@umugano.rw",
     phone: "+250 78X XXX XXX",
+    passwordHash: bcrypt.hashSync(process.env.MUCOMA_PASSWORD ?? defaultPassword, 12),
     role: StaffRole.MUCOMA,
   },
   {
-    id: "staff-waiter",
-    fullName: "Eric Habimana",
-    email: "waiter@umugano.rw",
-    phone: "+250 78X XXX XXX",
-    role: StaffRole.WAITER,
-  },
-  {
-    id: "staff-receptionist",
+    id: "staff-front-desk",
     fullName: "Alice Uwase",
     email: "reception@umugano.rw",
     phone: "+250 78X XXX XXX",
-    role: StaffRole.RECEPTIONIST,
+    passwordHash: bcrypt.hashSync(process.env.FRONT_DESK_PASSWORD ?? defaultPassword, 12),
+    role: StaffRole.FRONT_DESK,
   },
 ];
 
@@ -329,6 +328,12 @@ async function main() {
   await prisma.order.deleteMany();
   await prisma.booking.deleteMany();
   await prisma.room.deleteMany();
+  await prisma.stockMovement.deleteMany();
+  await prisma.stocktakeLine.deleteMany();
+  await prisma.stocktake.deleteMany();
+  await prisma.accessGrant.deleteMany();
+  await prisma.auditEvent.deleteMany();
+  await prisma.session.deleteMany();
   await prisma.item.deleteMany();
   await prisma.table.deleteMany();
   await prisma.user.deleteMany();
@@ -357,7 +362,7 @@ async function main() {
       settlementStatus: "PENDING",
       checkedInAt,
       expectedCheckoutAt,
-      createdById: "staff-receptionist",
+      createdById: "staff-front-desk",
       notes: "Guest requested a quiet room.",
     },
   });

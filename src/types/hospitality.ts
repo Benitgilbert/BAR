@@ -81,6 +81,7 @@ export interface PosOrderItem {
   lineTotal: number;
   roundNumber: number;
   station: ProductionStation;
+  kitchenStatus: "QUEUED" | "PREPARING" | "READY" | "SERVED" | null;
   dispatchedAt: string | null;
   notes: string | null;
 }

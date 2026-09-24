@@ -1,29 +1,72 @@
-export type OperationalRole = "OWNER" | "RECEPTIONIST" | "WAITER" | "MUCOMA";
+export type StaffRoleName = "OWNER" | "MUCOMA" | "FRONT_DESK";
 
-export function getConfiguredRole(): OperationalRole {
-  const value = process.env.UMUGANO_ROLE?.toUpperCase();
+export type Capability =
+  | "dashboard.view"
+  | "pos.use"
+  | "orders.create"
+  | "orders.dispatch"
+  | "orders.settle"
+  | "rooms.manage"
+  | "products.manage"
+  | "stock.manage"
+  | "kitchen.view"
+  | "kitchen.update"
+  | "users.manage"
+  | "access.manage"
+  | "audit.view";
 
-  if (value === "ADMIN" || value === "OWNER") return "OWNER";
-  if (value === "RECEPTIONIST") return "RECEPTIONIST";
-  if (value === "WAITER") return "WAITER";
-  if (value === "MUCOMA") return "MUCOMA";
+export const capabilityCatalog: Capability[] = [
+  "dashboard.view",
+  "pos.use",
+  "orders.create",
+  "orders.dispatch",
+  "orders.settle",
+  "rooms.manage",
+  "products.manage",
+  "stock.manage",
+  "kitchen.view",
+  "kitchen.update",
+  "users.manage",
+  "access.manage",
+  "audit.view",
+];
 
-  // The current deployment has no authentication/session layer yet. Receptionist
-  // is the safe operational default while the full-access team is active.
-  return "RECEPTIONIST";
-}
-
-export function canManageCatalog(role: OperationalRole) {
-  return role === "OWNER" || role === "RECEPTIONIST" || role === "WAITER";
-}
-
-export function canOperatePos(role: OperationalRole) {
-  return role !== "MUCOMA";
-}
-
-export const roleLabels: Record<OperationalRole, string> = {
+export const roleLabels: Record<StaffRoleName, string> = {
   OWNER: "Owner",
-  RECEPTIONIST: "Receptionist",
-  WAITER: "Waiter",
   MUCOMA: "Mucoma",
+  FRONT_DESK: "Front Desk",
 };
+
+const roleCapabilities: Record<StaffRoleName, Capability[]> = {
+  OWNER: [
+    "dashboard.view",
+    "pos.use",
+    "orders.create",
+    "orders.dispatch",
+    "orders.settle",
+    "rooms.manage",
+    "products.manage",
+    "stock.manage",
+    "kitchen.view",
+    "kitchen.update",
+    "users.manage",
+    "access.manage",
+    "audit.view",
+  ],
+  FRONT_DESK: [
+    "dashboard.view",
+    "pos.use",
+    "orders.create",
+    "orders.dispatch",
+    "orders.settle",
+    "rooms.manage",
+    "products.manage",
+    "stock.manage",
+    "kitchen.view",
+  ],
+  MUCOMA: ["kitchen.view", "kitchen.update"],
+};
+
+export function hasCapability(role: StaffRoleName, capability: Capability) {
+  return roleCapabilities[role].includes(capability);
+}

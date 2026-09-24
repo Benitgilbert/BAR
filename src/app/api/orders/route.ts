@@ -12,6 +12,8 @@ import {
   serializeOrder,
   type RequestedOrderLine,
 } from "@/lib/order-service";
+import { requireCapability } from "@/lib/auth";
+import { recordAuditEvent } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
 interface OrderLineRequest {
@@ -63,6 +65,11 @@ function parseRequestedLines(lines: OrderLineRequest[] | undefined) {
 }
 
 export async function POST(request: Request) {
+  const actor = await requireCapability("orders.create");
+  if (!actor) {
+    return Response.json({ error: "POS order access is required" }, { status: 403 });
+  }
+
   let body: OrderRequest;
 
   try {
@@ -234,7 +241,7 @@ export async function POST(request: Request) {
 
       let dispatchedRoundIds: string[] = [];
       if (shouldDispatch) {
-        dispatchedRoundIds = await dispatchPendingRounds(transaction, order.id, now);
+        dispatchedRoundIds = await dispatchPendingRounds(transaction, order.id, actor.id, now);
       }
 
       if (instantPay) {
@@ -261,6 +268,14 @@ export async function POST(request: Request) {
       include: orderDetailsInclude,
     });
     if (!order) throw new Error("Order could not be loaded after saving");
+
+    await recordAuditEvent({
+      actorId: actor.id,
+      action: order.status === OrderStatus.PAID ? "ORDER_PAID" : result.dispatchedRoundIds.length ? "ROUND_DISPATCHED" : "ORDER_OPENED",
+      entityType: "Order",
+      entityId: order.id,
+      metadata: { orderNumber: order.orderNumber, type: order.type, total: order.total, appended: !result.isNewOrder },
+    });
 
     return Response.json(
       {

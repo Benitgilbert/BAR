@@ -80,16 +80,39 @@ Open [http://localhost:3000](http://localhost:3000).
 - `POST /api/orders/:id/settle` — settle an order and return the final receipt payload
 - `POST /api/bookings` — check a guest into a room
 
-## Inventory and staff access
+## Authentication and roles
 
-`/inventory` now supports product registration, editing, stock adjustments, activation/restoration, and safe archival. Historical orders remain readable when a product is archived.
+The system uses three roles:
 
-The current operational policy is:
+- `OWNER`: full access, access management, and audit
+- `FRONT_DESK`: full operational access for waiter/receptionist duties
+- `MUCOMA`: kitchen queue and kitchen status updates only
 
-- Owner, Receptionist, and Waiter: full operational and catalog access
-- Mucoma: kitchen-ticket access only; no catalog, pricing, or payment permissions
+Each worker signs in with their own email and password. The Owner can grant temporary or permanent capabilities from `/access`. Grants are recorded, can expire, and can be revoked immediately.
 
-The current deployment uses `UMUGANO_ROLE` as a temporary server-side role setting and defaults to `RECEPTIONIST`. Replace this with authenticated sessions before production multi-user rollout.
+Seed password variables:
+
+```env
+OWNER_PASSWORD=...
+FRONT_DESK_PASSWORD=...
+MUCOMA_PASSWORD=...
+```
+
+The development seed fallback password is `ChangeMe123!`; change it before deployment. Passwords are never committed.
+
+## Audit and stock movements
+
+The activity log at `/activity` is append-only. Product changes, stock movements, logins, access grants/revocations, dispatches, and settlements are recorded with actor and timestamp.
+
+Inventory supports:
+
+- Product CRUD and safe archival
+- Refill
+- Adjustment
+- Waste/spoilage
+- Physical stocktake
+
+Kitchen dispatch items can move through `Received → Preparing → Ready → Served` at `/kitchen`.
 
 ## Validation
 

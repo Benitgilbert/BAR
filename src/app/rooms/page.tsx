@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 
 import { RoomDashboard } from "@/components/room-dashboard";
+import { requirePageCapability } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { RoomSummary } from "@/types/hospitality";
 
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
 
 export default async function RoomsPage() {
   await connection();
+  await requirePageCapability("rooms.manage");
 
   const rooms = await prisma.room.findMany({
     orderBy: [{ type: "asc" }, { number: "asc" }],

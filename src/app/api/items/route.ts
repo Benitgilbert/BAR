@@ -1,6 +1,7 @@
 import { ItemCategory, Prisma, ProductionStation } from "@prisma/client";
 
-import { canManageCatalog, getConfiguredRole } from "@/lib/permissions";
+import { recordAuditEvent } from "@/lib/audit";
+import { requireCapability } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const categories = new Set<string>(Object.values(ItemCategory));
@@ -48,6 +49,9 @@ function parseItemInput(body: Record<string, unknown>) {
 }
 
 export async function GET(request: Request) {
+  if (!(await requireCapability("products.manage"))) {
+    return Response.json({ error: "Catalog access is required" }, { status: 403 });
+  }
   const url = new URL(request.url);
   const search = url.searchParams.get("search")?.trim();
   const category = url.searchParams.get("category") as ItemCategory | null;
@@ -71,8 +75,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!canManageCatalog(getConfiguredRole())) {
-    return Response.json({ error: "Mucoma can manage kitchen tickets, not the product catalog" }, { status: 403 });
+  const actor = await requireCapability("products.manage");
+  if (!actor) {
+    return Response.json({ error: "Sign in with catalog access to register products" }, { status: 403 });
   }
 
   let body: Record<string, unknown>;
@@ -84,6 +89,13 @@ export async function POST(request: Request) {
 
   try {
     const item = await prisma.item.create({ data: parseItemInput(body) });
+    await recordAuditEvent({
+      actorId: actor.id,
+      action: "PRODUCT_CREATED",
+      entityType: "Item",
+      entityId: item.id,
+      metadata: { sku: item.sku, name: item.name, price: item.price, stock: item.stock },
+    });
     return Response.json({ item }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

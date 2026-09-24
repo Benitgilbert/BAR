@@ -3,6 +3,8 @@ import { Geist, Geist_Mono, Lora } from "next/font/google";
 
 import { AppShell } from "@/components/app-shell";
 import { businessConfig } from "@/config/business";
+import { getCurrentUser } from "@/lib/auth";
+import { roleLabels } from "@/lib/permissions";
 
 import "./globals.css";
 
@@ -36,14 +38,19 @@ export const viewport: Viewport = {
   colorScheme: "light",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const user = await getCurrentUser();
+  const currentUser = user
+    ? { fullName: user.fullName, role: user.role, roleLabel: roleLabels[user.role] }
+    : null;
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${lora.variable}`}
     >
       <body>
-        <AppShell>{children}</AppShell>
+        <AppShell currentUser={currentUser}>{children}</AppShell>
       </body>
     </html>
   );

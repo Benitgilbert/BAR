@@ -1,10 +1,12 @@
 import {
+  KitchenStatus,
   OrderStatus,
   OrderType,
   PaymentMethod,
   Prisma,
   ProductionStation,
   StaffRole,
+  StockMovementType,
 } from "@prisma/client";
 
 import type {
@@ -118,7 +120,7 @@ export async function resolveWaiter(
         where: { id: waiterId, active: true },
       })
     : await transaction.user.findFirst({
-        where: { role: StaffRole.WAITER, active: true },
+        where: { role: StaffRole.FRONT_DESK, active: true },
         orderBy: { createdAt: "asc" },
       });
 
@@ -153,6 +155,7 @@ export async function createOrderRound(
           itemId: line.itemId,
           itemName: line.item.name,
           station: line.item.productionStation,
+          kitchenStatus: line.item.productionStation === ProductionStation.KITCHEN_MUCOMA ? KitchenStatus.QUEUED : null,
           unitPrice: line.item.price,
           quantity: line.quantity,
           lineTotal: line.item.price * line.quantity,
@@ -167,6 +170,7 @@ export async function createOrderRound(
 export async function dispatchPendingRounds(
   transaction: Prisma.TransactionClient,
   orderId: string,
+  actorId: string,
   dispatchedAt = new Date(),
 ) {
   const pendingRounds = await transaction.orderRound.findMany({
@@ -203,9 +207,22 @@ export async function dispatchPendingRounds(
   }
 
   for (const [itemId, quantity] of quantities) {
-    await transaction.item.update({
-      where: { id: itemId },
-      data: { stock: { decrement: quantity } },
+    const item = inventoryById.get(itemId);
+    if (!item) throw new Error("A menu item is no longer available");
+    const stockAfter = item.stock - quantity;
+    await transaction.item.update({ where: { id: itemId }, data: { stock: stockAfter } });
+    await transaction.stockMovement.create({
+      data: {
+        itemId,
+        actorId,
+        type: StockMovementType.SALE,
+        quantity: -quantity,
+        stockBefore: item.stock,
+        stockAfter,
+        referenceType: "ORDER_ROUND",
+        referenceId: orderId,
+        notes: "Menu item sold",
+      },
     });
   }
 
@@ -318,6 +335,7 @@ export function serializeOrder(order: OrderDetails) {
     lineTotal: item.lineTotal,
     roundNumber: item.roundNumber,
     station: item.station,
+    kitchenStatus: item.kitchenStatus,
     dispatchedAt: item.dispatchedAt?.toISOString() ?? null,
     notes: item.notes,
   }));

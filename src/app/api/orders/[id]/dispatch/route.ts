@@ -6,6 +6,8 @@ import {
   orderDetailsInclude,
   serializeOrder,
 } from "@/lib/order-service";
+import { requireCapability } from "@/lib/auth";
+import { recordAuditEvent } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
 interface DispatchRequest {
@@ -17,6 +19,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const actor = await requireCapability("orders.dispatch");
+  if (!actor) {
+    return Response.json({ error: "Order dispatch access is required" }, { status: 403 });
+  }
   let body: DispatchRequest = {};
 
   try {
@@ -46,7 +52,7 @@ export async function POST(
         });
       }
 
-      const roundIds = await dispatchPendingRounds(transaction, id);
+      const roundIds = await dispatchPendingRounds(transaction, id, actor.id);
       if (roundIds.length === 0) {
         throw new Error("There are no pending items to dispatch");
       }
@@ -59,6 +65,7 @@ export async function POST(
     });
     if (!order) throw new Error("Order could not be loaded after dispatch");
 
+    await recordAuditEvent({ actorId: actor.id, action: "ROUND_DISPATCHED", entityType: "Order", entityId: order.id, metadata: { roundIds: dispatchedRoundIds, ticketCount: buildStationTickets(order, dispatchedRoundIds).length } });
     return Response.json({
       order: serializeOrder(order),
       tickets: buildStationTickets(order, dispatchedRoundIds),

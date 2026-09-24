@@ -9,11 +9,9 @@ datasource db {
 }
 
 enum StaffRole {
-  ADMIN
-  CASHIER
-  WAITER
-  RECEPTIONIST
+  OWNER
   MUCOMA
+  FRONT_DESK
 }
 
 enum RoomType {
@@ -83,21 +81,140 @@ enum PaymentMethod {
   OTHER
 }
 
+enum StockMovementType {
+  SALE
+  REFILL
+  ADJUSTMENT
+  WASTE
+  STOCKTAKE
+  RETURN
+}
+
+enum KitchenStatus {
+  QUEUED
+  PREPARING
+  READY
+  SERVED
+}
+
 model User {
-  id              String    @id @default(cuid())
-  fullName        String
-  email           String    @unique
-  phone           String?
-  passwordHash    String?
-  role            StaffRole @default(WAITER)
-  active          Boolean   @default(true)
-  bookingsCreated Booking[] @relation("BookingCreatedBy")
-  orders          Order[]   @relation("OrderCashier")
-  ordersWaited    Order[]   @relation("OrderWaiter")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                String          @id @default(cuid())
+  fullName          String
+  email             String          @unique
+  phone             String?
+  passwordHash      String?
+  role              StaffRole       @default(FRONT_DESK)
+  active            Boolean         @default(true)
+  bookingsCreated   Booking[]       @relation("BookingCreatedBy")
+  orders            Order[]         @relation("OrderCashier")
+  ordersWaited      Order[]         @relation("OrderWaiter")
+  sessions          Session[]
+  grantsReceived    AccessGrant[]   @relation("AccessGrantRecipient")
+  grantsGiven       AccessGrant[]   @relation("AccessGrantGrantor")
+  auditEvents       AuditEvent[]    @relation("AuditActor")
+  stockMovements    StockMovement[] @relation("StockMovementActor")
+  stocktakesCreated Stocktake[]     @relation("StocktakeCreator")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   @@index([role, active])
+}
+
+model Session {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId, expiresAt])
+}
+
+model AccessGrant {
+  id          String    @id @default(cuid())
+  capability  String
+  recipientId String
+  recipient   User      @relation("AccessGrantRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  grantedById String
+  grantedBy   User      @relation("AccessGrantGrantor", fields: [grantedById], references: [id], onDelete: Restrict)
+  startsAt    DateTime  @default(now())
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  reason      String?
+  createdAt   DateTime  @default(now())
+
+  @@index([recipientId, capability, expiresAt])
+  @@index([grantedById, createdAt])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  requestId  String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([action, createdAt])
+}
+
+model StockMovement {
+  id            String            @id @default(cuid())
+  itemId        String
+  item          Item              @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  actorId       String
+  actor         User              @relation("StockMovementActor", fields: [actorId], references: [id], onDelete: Restrict)
+  type          StockMovementType
+  quantity      Int
+  stockBefore   Int
+  stockAfter    Int
+  referenceType String?
+  referenceId   String?
+  notes         String?
+  createdAt     DateTime          @default(now())
+
+  @@index([itemId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([type, createdAt])
+}
+
+model Stocktake {
+  id          String          @id @default(cuid())
+  code        String          @unique
+  createdById String
+  createdBy   User            @relation("StocktakeCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  notes       String?
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  lines       StocktakeLine[]
+
+  @@index([createdById, createdAt])
+}
+
+model StocktakeLine {
+  id          String    @id @default(cuid())
+  stocktakeId String
+  stocktake   Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  itemId      String
+  item        Item      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  systemQty   Int
+  countedQty  Int
+  difference  Int
+  createdAt   DateTime  @default(now())
+
+  @@unique([stocktakeId, itemId])
+  @@index([itemId])
 }
 
 model Room {
@@ -162,6 +279,8 @@ model Item {
   productionStation ProductionStation @default(BAR)
   active            Boolean           @default(true)
   orderItems        OrderItem[]
+  stockMovements    StockMovement[]
+  stocktakeLines    StocktakeLine[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -239,22 +358,23 @@ model OrderRound {
 }
 
 model OrderItem {
-  id           String            @id @default(cuid())
-  orderId      String
-  order        Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  roundId      String?
-  round        OrderRound?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
-  roundNumber  Int               @default(1)
-  itemId       String
-  item         Item              @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  itemName     String
-  station      ProductionStation @default(BAR)
-  unitPrice    Int
-  quantity     Int
-  lineTotal    Int
-  notes        String?
-  dispatchedAt DateTime?
-  createdAt    DateTime          @default(now())
+  id            String            @id @default(cuid())
+  orderId       String
+  order         Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  roundId       String?
+  round         OrderRound?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  roundNumber   Int               @default(1)
+  itemId        String
+  item          Item              @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemName      String
+  station       ProductionStation @default(BAR)
+  unitPrice     Int
+  quantity      Int
+  lineTotal     Int
+  notes         String?
+  kitchenStatus KitchenStatus?
+  dispatchedAt  DateTime?
+  createdAt     DateTime          @default(now())
 
   @@index([orderId])
   @@index([itemId])

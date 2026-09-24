@@ -11,6 +11,7 @@ import { connection } from "next/server";
 import Link from "next/link";
 
 import { formatRWF } from "@/config/business";
+import { requirePageCapability } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function formatDate(value: Date) {
@@ -31,6 +32,7 @@ const orderStatusStyles = {
 
 export default async function OrdersPage() {
   await connection();
+  await requirePageCapability("dashboard.view");
 
   const orders = await prisma.order.findMany({
     include: {

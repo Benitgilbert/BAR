@@ -47,7 +47,7 @@ export function MobilePosHeader() {
           <Wifi className="h-3.5 w-3.5 text-emerald-300" />
           Synced just now
         </span>
-        <span>Cashier · Grace M.</span>
+        <span>Front Desk · active shift</span>
       </div>
     </section>
   );

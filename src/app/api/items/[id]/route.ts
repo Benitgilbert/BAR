@@ -1,6 +1,7 @@
 import { ItemCategory, Prisma, ProductionStation } from "@prisma/client";
 
-import { canManageCatalog, getConfiguredRole } from "@/lib/permissions";
+import { recordAuditEvent } from "@/lib/audit";
+import { requireCapability } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const categories = new Set<string>(Object.values(ItemCategory));
@@ -23,8 +24,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!canManageCatalog(getConfiguredRole())) {
-    return Response.json({ error: "Mucoma can update kitchen tickets, not products" }, { status: 403 });
+  const actor = await requireCapability("products.manage");
+  if (!actor) {
+    return Response.json({ error: "Sign in with catalog access to edit products" }, { status: 403 });
   }
 
   const { id } = await params;
@@ -78,6 +80,13 @@ export async function PATCH(
     if (body.active !== undefined) data.active = Boolean(body.active);
 
     const item = await prisma.item.update({ where: { id }, data });
+    await recordAuditEvent({
+      actorId: actor.id,
+      action: "PRODUCT_UPDATED",
+      entityType: "Item",
+      entityId: item.id,
+      metadata: { sku: item.sku, before: { name: current.name, price: current.price, stock: current.stock, active: current.active }, after: { name: item.name, price: item.price, stock: item.stock, active: item.active } },
+    });
     return Response.json({ item });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -94,14 +103,16 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!canManageCatalog(getConfiguredRole())) {
-    return Response.json({ error: "Mucoma cannot archive products" }, { status: 403 });
+  const actor = await requireCapability("products.manage");
+  if (!actor) {
+    return Response.json({ error: "Sign in with catalog access to archive products" }, { status: 403 });
   }
 
   const { id } = await params;
   try {
     // Archive instead of deleting so historical order items remain readable.
     const item = await prisma.item.update({ where: { id }, data: { active: false } });
+    await recordAuditEvent({ actorId: actor.id, action: "PRODUCT_ARCHIVED", entityType: "Item", entityId: item.id, metadata: { sku: item.sku } });
     return Response.json({ item, archived: true });
   } catch (error) {
     return Response.json(

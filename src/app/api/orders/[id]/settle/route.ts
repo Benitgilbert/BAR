@@ -6,6 +6,8 @@ import {
   orderDetailsInclude,
   serializeOrder,
 } from "@/lib/order-service";
+import { requireCapability } from "@/lib/auth";
+import { recordAuditEvent } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
 interface SettleRequest {
@@ -28,6 +30,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const actor = await requireCapability("orders.settle");
+  if (!actor) {
+    return Response.json({ error: "Payment settlement access is required" }, { status: 403 });
+  }
   let body: SettleRequest;
 
   try {
@@ -109,6 +115,13 @@ export async function POST(
       include: orderDetailsInclude,
     });
 
+    await recordAuditEvent({
+      actorId: actor.id,
+      action: "PAYMENT_SETTLED",
+      entityType: "Order",
+      entityId: settledOrder.id,
+      metadata: { orderNumber: settledOrder.orderNumber, paymentMethod: settledOrder.paymentMethod, amountPaid: settledOrder.amountPaid, total: settledOrder.total, changeDue: settledOrder.changeDue },
+    });
     return Response.json({
       order: serializeOrder(settledOrder),
       receipt: buildReceiptPayload(settledOrder),

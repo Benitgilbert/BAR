@@ -1,5 +1,7 @@
 import { RentalType } from "@prisma/client";
 
+import { recordAuditEvent } from "@/lib/audit";
+import { requireCapability } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 interface BookingRequest {
@@ -15,6 +17,11 @@ function getErrorMessage(error: unknown) {
 }
 
 export async function POST(request: Request) {
+  const actor = await requireCapability("rooms.manage");
+  if (!actor) {
+    return Response.json({ error: "Rooms access is required" }, { status: 403 });
+  }
+
   let body: BookingRequest;
 
   try {
@@ -79,7 +86,7 @@ export async function POST(request: Request) {
           status: "CHECKED_IN",
           checkedInAt,
           expectedCheckoutAt,
-          createdById: "staff-receptionist",
+          createdById: actor.id,
         },
       });
 
@@ -87,6 +94,7 @@ export async function POST(request: Request) {
         where: { id: room.id },
         data: { status: "OCCUPIED" },
       });
+      await recordAuditEvent({ actorId: actor.id, action: "BOOKING_CREATED", entityType: "Booking", entityId: createdBooking.id, metadata: { bookingCode, room: room.number, guestName, rentalType } }, transaction);
 
       return createdBooking;
     });
