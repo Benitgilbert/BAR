@@ -1,13 +1,13 @@
+import { OrderStatus } from "@prisma/client";
 import {
   ArrowUpRight,
+  BarChart3,
   BedDouble,
   ChevronRight,
   Clock3,
   PackageOpen,
   Plus,
   ShoppingCart,
-  Sparkles,
-  Users,
   UtensilsCrossed,
   WalletCards,
 } from "lucide-react";
@@ -32,11 +32,38 @@ function formatTime(value: Date) {
   }).format(value);
 }
 
+function getKigaliDayRange() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Africa/Kigali",
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const start = new Date(`${value("year")}-${value("month")}-${value("day")}T00:00:00+02:00`);
+
+  return {
+    start,
+    end: new Date(start.getTime() + 24 * 60 * 60 * 1_000),
+  };
+}
+
 export default async function DashboardPage() {
   await connection();
-  const user = await requirePageCapability("dashboard.view");
+  await requirePageCapability("dashboard.view");
 
-  const [rooms, items, tables, activeBookings, openOrders] = await Promise.all([
+  const { start: todayStart, end: tomorrowStart } = getKigaliDayRange();
+  const [
+    rooms,
+    items,
+    tables,
+    activeBookings,
+    openOrders,
+    todayOrderCount,
+    todayPaidStats,
+    todayItemsSold,
+  ] = await Promise.all([
     prisma.room.findMany({
       orderBy: [{ type: "asc" }, { number: "asc" }],
       include: {
@@ -58,6 +85,24 @@ export default async function DashboardPage() {
       orderBy: { expectedCheckoutAt: "asc" },
     }),
     prisma.order.count({ where: { status: "OPEN" } }),
+    prisma.order.count({
+      where: { createdAt: { gte: todayStart, lt: tomorrowStart } },
+    }),
+    prisma.order.aggregate({
+      where: {
+        status: OrderStatus.PAID,
+        paidAt: { gte: todayStart, lt: tomorrowStart },
+      },
+      _count: { _all: true },
+      _sum: { total: true },
+    }),
+    prisma.orderItem.aggregate({
+      where: {
+        createdAt: { gte: todayStart, lt: tomorrowStart },
+        order: { status: OrderStatus.PAID },
+      },
+      _sum: { quantity: true },
+    }),
   ]);
 
   const availableRooms = rooms.filter((room) => room.status === "AVAILABLE").length;
@@ -66,10 +111,12 @@ export default async function DashboardPage() {
   const lowStockItems = items.filter(
     (item) => item.stock <= item.lowStockThreshold,
   );
-  const inventoryValue = items.reduce(
-    (total, item) => total + item.stock * item.price,
-    0,
-  );
+  const todayRevenue = todayPaidStats._sum.total ?? 0;
+  const todayPaidOrders = todayPaidStats._count._all;
+  const todayItemsSoldCount = todayItemsSold._sum.quantity ?? 0;
+  const averagePaidOrder = todayPaidOrders
+    ? Math.round(todayRevenue / todayPaidOrders)
+    : 0;
   const occupancyRate = rooms.length
     ? Math.round((occupiedRooms / rooms.length) * 100)
     : 0;
@@ -84,30 +131,30 @@ export default async function DashboardPage() {
 
   const metrics = [
     {
-      label: "Occupied rooms",
+      label: "Rooms occupied",
       value: `${occupiedRooms} / ${rooms.length}`,
       note: `${occupancyRate}% occupancy`,
       icon: BedDouble,
       tone: "bg-forest-100 text-forest-800",
     },
     {
-      label: "Active guests",
-      value: activeBookings.length.toString(),
-      note: `${availableRooms} rooms ready`,
-      icon: Users,
-      tone: "bg-amber-100 text-amber-800",
-    },
-    {
       label: "Open orders",
       value: openOrders.toString(),
-      note: `${tables} service points`,
+      note: `${todayOrderCount} orders today`,
       icon: ShoppingCart,
       tone: "bg-sky-100 text-sky-800",
     },
     {
-      label: "Inventory value",
-      value: formatRWF(inventoryValue),
-      note: `${lowStockItems.length} low-stock items`,
+      label: "Available rooms",
+      value: availableRooms.toString(),
+      note: `${cleaningRooms} cleaning`,
+      icon: BedDouble,
+      tone: "bg-emerald-50 text-emerald-700",
+    },
+    {
+      label: "Low stock",
+      value: lowStockItems.length.toString(),
+      note: lowStockItems.length ? "Needs attention" : "Stock is healthy",
       icon: PackageOpen,
       tone: "bg-violet-100 text-violet-800",
     },
@@ -118,15 +165,13 @@ export default async function DashboardPage() {
       <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div>
           <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-gold-600">
-            <Sparkles className="h-3.5 w-3.5" />
-            {today}
+            <BarChart3 className="h-3.5 w-3.5" />
+            Business overview
           </p>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.035em] text-forest-950 sm:text-4xl">
-            Good afternoon, {user.fullName.split(" ")[0]}.
+            Today at Umugano
           </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Here&apos;s what&apos;s happening at Umugano today.
-          </p>
+          <p className="mt-2 text-sm text-slate-500">{today}</p>
         </div>
         <div className="flex gap-2.5">
           <Link
@@ -143,6 +188,48 @@ export default async function DashboardPage() {
             <ShoppingCart className="h-4 w-4" />
             Start order
           </Link>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-[24px] bg-forest-950 text-white shadow-[0_18px_45px_rgba(9,39,29,0.14)]">
+        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-300">
+              <WalletCards className="h-3.5 w-3.5" />
+              Today&apos;s income
+            </div>
+            <p className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
+              {formatRWF(todayRevenue)}
+            </p>
+            <p className="mt-1 text-xs text-white/50">
+              {todayPaidOrders} paid order{todayPaidOrders === 1 ? "" : "s"} · Average {formatRWF(averagePaidOrder)}
+            </p>
+          </div>
+          <Link
+            href="/orders"
+            className="inline-flex h-11 items-center justify-center gap-2 self-start rounded-xl bg-white/10 px-4 text-xs font-extrabold text-white transition hover:bg-white/15 sm:self-auto"
+          >
+            View orders
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 border-t border-white/10 sm:grid-cols-4">
+          <div className="border-r border-white/10 px-5 py-4 sm:px-6">
+            <p className="text-xl font-black">{todayOrderCount}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/40">Orders today</p>
+          </div>
+          <div className="px-5 py-4 sm:border-r sm:border-white/10 sm:px-6">
+            <p className="text-xl font-black">{todayPaidOrders}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/40">Paid today</p>
+          </div>
+          <div className="border-r border-white/10 px-5 py-4 sm:px-6">
+            <p className="text-xl font-black">{todayItemsSoldCount}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/40">Items sold</p>
+          </div>
+          <div className="px-5 py-4 sm:px-6">
+            <p className="text-xl font-black">{activeBookings.length}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/40">Active guests</p>
+          </div>
         </div>
       </section>
 
